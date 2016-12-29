@@ -16,6 +16,8 @@ import android.net.Uri;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.app.ActivityCompat;
+import android.support.v7.graphics.Palette;
+import android.support.v7.graphics.Palette.Swatch;
 import android.util.Base64;
 import android.util.Log;
 import android.widget.ArrayAdapter;
@@ -31,6 +33,7 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.WritableArray;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -48,6 +51,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -419,9 +423,12 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       return;
     }
 
+    Bitmap myBitmap = null;
+    WritableArray aSwatches = Arguments.createArray();;
+
     BitmapFactory.Options options = new BitmapFactory.Options();
     options.inJustDecodeBounds = true;
-    BitmapFactory.decodeFile(realPath, options);
+    myBitmap = BitmapFactory.decodeFile(realPath, options);
     int initialWidth = options.outWidth;
     int initialHeight = options.outHeight;
 
@@ -431,15 +438,39 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       response.putInt("height", initialHeight);
     } else {
       File resized = getResizedImage(realPath, initialWidth, initialHeight);
+      myBitmap = null;
       if (resized == null) {
         response.putString("error", "Can't resize the image");
       } else {
          realPath = resized.getAbsolutePath();
          uri = Uri.fromFile(resized);
-         BitmapFactory.decodeFile(realPath, options);
+         myBitmap = BitmapFactory.decodeFile(realPath, options);
          response.putInt("width", options.outWidth);
          response.putInt("height", options.outHeight);
       }
+    }
+    myBitmap = BitmapFactory.decodeFile(realPath);
+    if (myBitmap == null) {
+        response.putString("domColor", "Bitmap Null");
+    } else if (!myBitmap.isRecycled()) {
+        Palette palette = Palette.from(myBitmap).generate();
+        List<Palette.Swatch> swatches = palette.getSwatches();
+        ListIterator litr = swatches.listIterator();
+        while(litr.hasNext()) {
+            Palette.Swatch element = (Palette.Swatch)litr.next();
+
+            WritableMap swatch = Arguments.createMap();
+            swatch.putInt("color", element.getRgb());
+            swatch.putInt("population", element.getPopulation());
+            swatch.putInt("titleTextColor", element.getTitleTextColor());
+            swatch.putInt("bodyTextColor", element.getBodyTextColor());
+            swatch.putString("swatchInfo", element.toString());
+            aSwatches.pushMap(swatch);
+        }
+        response.putArray("domColor", aSwatches );
+        //response.putString("domColor", "Did nothing");
+    } else {
+      response.putString("domColor", "Bitmap Recycled");
     }
 
     response.putString("uri", uri.toString());
